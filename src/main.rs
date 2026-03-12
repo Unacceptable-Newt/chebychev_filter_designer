@@ -1,54 +1,251 @@
 mod cheb_calc;
-mod complex;
 mod attenuation;
+mod complex;
 
+use crate::complex::*;
+use crate::cheb_calc::*;
+use crate::attenuation::*;
 
-use cheb_calc::*;
-use attenuation::*;
-// ─────────────────────────────────────────────────────────────────────────────
-// Demo main
-// ─────────────────────────────────────────────────────────────────────────────
-fn main() {
-    let n         = 5;
-    let ripple_db = 0.5;
-    let f_low     = 900e6_f64;   // 900 MHz
-    let f_high    = 1100e6_f64;  // 1.1 GHz
+use std::io;
 
-    println!("═══════════════════════════════════════════════════════");
-    println!(" Chebyshev Bandpass Filter  |  N={n}  |  {ripple_db} dB ripple");
-    println!(" Passband: {:.0} MHz – {:.0} MHz",
-             f_low / 1e6, f_high / 1e6);
-    println!("═══════════════════════════════════════════════════════");
+use std::rc::Rc;
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::Stylize,
+    symbols::border,
+    layout::{Constraint, Layout, Direction},
+    text::{Line, Text, Span},
+    widgets::{Block, Paragraph, Widget},
+    DefaultTerminal, Frame,
+};
 
-    let (g, elements) = chebyshev_bandpass_elements(n, ripple_db, f_low, f_high);
+#[derive(Debug, Default)]
+pub struct App{
+    filt_start_freq: f32,
+    filt_end_freq: f32,
+    filt_stages: usize,
+    filt_ripple: f32,
+    graph_points: usize,
+    graph_start_freq: f32,
+    graph_end_freq: f32,
+    option_select: usize,
+    exit: bool,
+}
 
-    println!("\nPrototype g-values:");
-    for (i, gv) in g.iter().enumerate() {
-        println!("  g[{i}] = {gv:.6}");
+impl App {
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        while !self.exit {
+            terminal.draw(|frame| self.draw(frame))?;
+            self.handle_events()?;
+        }
+        Ok(())
     }
 
-    println!("\nBandpass LC elements (series & shunt per stage):");
-    println!("{:<6} {:>14} {:>14} {:>14} {:>14}",
-             "Stage", "L_series (nH)", "C_series (pF)", "L_shunt (nH)", "C_shunt (pF)");
-    println!("{}", "─".repeat(66));
-    for e in &elements {
-        println!("{:<6} {:>14.4} {:>14.4} {:>14.4} {:>14.4}",
-                 e.index,
-                 e.l_series * 1e9,
-                 e.c_series * 1e12,
-                 e.l_shunt  * 1e9,
-                 e.c_shunt  * 1e12);
+    pub fn draw(&self, frame: &mut Frame) {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![
+                Constraint::Fill(1),
+                Constraint::Length(3),
+            ]).split(frame.area());
+        frame.render_widget(self, layout[0]);
+        frame.render_widget(self, layout[1]);
     }
-    println!();
 
-    // ── Attenuation sweep ─────────────────────────────────────────────────
-    println!("Attenuation sweep (50 Ω system):");
-    println!("{:>12}  {:>12}", "Freq (MHz)", "Atten (dB)");
-    println!("{}", "─".repeat(27));
-    let sweep = sweep_attenuation(&elements, 500e6, 1500e6, 21, 50.0);
-    for (f, att) in &sweep {
-        let marker = if *att < 1.0 { " ← passband" } else { "" };
-        println!("{:>12.1}  {:>12.3}{}", f / 1e6, att, marker);
+    fn handle_events(&mut self) -> io::Result<()> {
+        match event::read()? {
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event)
+            }
+            _ => {}
+        };
+        Ok(())
     }
-    println!();
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.exit(),
+            KeyCode::Left => self.change_left(),
+            KeyCode::Right => self.change_right(),
+            KeyCode::Up => self.change_up(),
+            KeyCode::Down => self.change_down(),
+            _ => {}
+        }
+    }
+
+    fn exit(&mut self) {
+        self.exit = true;
+    }
+
+    fn change_left(&mut self) {
+        self.option_select = 
+            if (self.option_select <= 0) {
+                0
+            }
+            else {
+                self.option_select - 1
+            };
+    }
+
+    fn change_right(&mut self) {
+        self.option_select =
+            if (self.option_select < 3) {
+                self.option_select + 1
+            }
+            else {
+                self.option_select
+            };
+    }
+
+    fn change_up(&mut self) {
+        match self.option_select {
+            0 => self.inc_start_freq(),
+            1 => self.inc_end_freq(),
+            2 => self.inc_stages(),
+            3 => self.inc_ripple(),
+            _ => {}
+        }
+    }
+
+    fn change_down(&mut self) {
+        match self.option_select {
+            0 => self.dec_start_freq(),
+            1 => self.dec_end_freq(),
+            2 => self.dec_stages(),
+            3 => self.dec_ripple(),
+            _ => {}
+        }
+    }
+
+    fn inc_start_freq(&mut self) {
+        self.filt_start_freq += 0.01;
+    }
+
+    fn dec_start_freq(&mut self) {
+        self.filt_start_freq -= 0.01;
+    }
+    fn inc_end_freq(&mut self) {
+        self.filt_end_freq += 0.01;
+    }
+
+    fn dec_end_freq(&mut self) {
+        self.filt_end_freq -= 0.01;
+    }
+
+    fn inc_stages(&mut self) {
+        self.filt_stages += 1;
+    }
+
+    fn dec_stages(&mut self) {
+        self.filt_stages -= 1;
+    }
+
+    fn inc_ripple(&mut self) {
+        self.filt_ripple += 0.01;
+    }
+
+    fn dec_ripple(&mut self) {
+        self.filt_ripple -= 0.01;
+    }
+}
+
+struct App_Graph {
+
+}
+
+impl Widget for &App {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let instructions = Line::from(vec![
+            " Select L ".into(),
+            "<Left>".blue().bold(),
+            " Select R ".into(),
+            "<Right>".blue().bold(),
+            " Incr Selected ".into(),
+            "<Up>".blue().bold(),
+            " Dec Selected ".into(),
+            "<Down>".blue().bold(),
+            " Quit ".into(),
+            "<Q> ".blue().bold(),
+        ]);
+        let block = Block::bordered()
+            .title_bottom(instructions.centered())
+            .border_set(border::THICK);
+
+        let mut options: Vec<Span>= vec![
+            "FS_freq: ".into(),
+            self.filt_start_freq.to_string().yellow(),
+            " FE_freq: ".into(),
+            self.filt_end_freq.to_string().yellow(),
+            " n_filt: ".into(),
+            self.filt_stages.to_string().yellow(),
+            " ripple_filt: ".into(),
+            self.filt_ripple.to_string().yellow(),
+        ];
+
+        for (i, o) in options.iter_mut().enumerate() {
+            if i == (self.option_select * 2) {
+                *o = o.clone().bold();
+            }
+        }
+
+
+        let counter_text = Text::from(vec![Line::from(options)]);
+
+        Paragraph::new(counter_text)
+            .centered()
+            .block(block)
+            .render(area, buf);
+
+    } 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Style;
+
+    #[test]
+    fn render() {
+        let app = App::default();
+        let mut buf = Buffer::empty(Rect::new(0, 0, 50, 4));
+
+        app.render(buf.area, &mut buf);
+
+        let mut expected = Buffer::with_lines(vec![
+            "┏━━━━━━━━━━━━━ Counter App Tutorial ━━━━━━━━━━━━━┓",
+            "┃                    Value: 0                    ┃",
+            "┃                                                ┃",
+            "┗━ Decrement <Left> Increment <Right> Quit <Q> ━━┛",
+        ]);
+        let title_style = Style::new().bold();
+        let counter_style = Style::new().yellow();
+        let key_style = Style::new().blue().bold();
+        expected.set_style(Rect::new(14, 0, 22, 1), title_style);
+        expected.set_style(Rect::new(28, 1, 1, 1), counter_style);
+        expected.set_style(Rect::new(13, 3, 6, 1), key_style);
+        expected.set_style(Rect::new(30, 3, 7, 1), key_style);
+        expected.set_style(Rect::new(43, 3, 4, 1), key_style);
+
+        assert_eq!(buf, expected);
+    }
+
+    #[test]
+    fn handle_key_event() {
+        let mut app = App::default();
+        app.handle_key_event(KeyCode::Right.into());
+        assert_eq!(app.counter, 1);
+
+        app.handle_key_event(KeyCode::Left.into());
+        assert_eq!(app.counter, 0);
+
+        let mut app = App::default();
+        app.handle_key_event(KeyCode::Char('q').into());
+        assert!(app.exit);
+    }
+}
+
+fn main() -> io::Result<()>{
+    ratatui::run(|terminal| App::default().run(terminal))
 }
