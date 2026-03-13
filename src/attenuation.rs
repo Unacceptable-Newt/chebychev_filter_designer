@@ -55,34 +55,6 @@ pub fn attenuation_db(elements: &[BandpassElement], freq_hz: f64, z0: f64) -> f6
     if mag <= 0.0 { f64::INFINITY } else { -20.0 * mag.log10() }
 }
 
-/// Sweep attenuation across a frequency range.
-///
-/// # Arguments
-/// * `elements`  – Filter element values.
-/// * `f_start`   – Start frequency in Hz.
-/// * `f_stop`    – Stop frequency in Hz.
-/// * `n_points`  – Number of evenly-spaced frequency points.
-/// * `z0`        – Reference impedance in Ω.
-///
-/// # Returns
-/// Vec of `(frequency_hz, attenuation_db)` pairs.
-pub fn sweep_attenuation(
-    elements: &[BandpassElement],
-    f_start: f64,
-    f_stop: f64,
-    n_points: usize,
-    z0: f64,
-) -> Vec<(f64, f64)> {
-    assert!(n_points >= 2);
-    let step = (f_stop - f_start) / (n_points - 1) as f64;
-    (0..n_points)
-        .map(|i| {
-            let f = f_start + i as f64 * step;
-            (f, attenuation_db(elements, f, z0))
-        })
-        .collect()
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Additional tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,14 +82,6 @@ mod attenuation_tests {
         let (_, elems, _, _) = make_filter();
         let att = attenuation_db(&elems, 500e6, 50.0);
         assert!(att > 20.0, "500 MHz should be well attenuated, got {att:.1} dB");
-    }
-
-    /// Sweep returns the right number of points.
-    #[test]
-    fn test_sweep_length() {
-        let (_, elems, _, _) = make_filter();
-        let pts = sweep_attenuation(&elems, 500e6, 1500e6, 101, 50.0);
-        assert_eq!(pts.len(), 101);
     }
 }
 

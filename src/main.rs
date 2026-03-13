@@ -2,22 +2,20 @@ mod cheb_calc;
 mod attenuation;
 mod complex;
 
-use crate::complex::*;
 use crate::cheb_calc::*;
 use crate::attenuation::*;
 
 use std::io;
 
-use std::rc::Rc;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::Stylize,
-    symbols::border,
+    style::{Stylize, Color},
+    symbols::{border, Marker},
     layout::{Constraint, Layout, Direction},
     text::{Line, Text, Span},
-    widgets::{Block, Paragraph, Widget, Borders},
+    widgets::{Block, Paragraph, Widget, Dataset, GraphType, Axis, Chart},
     DefaultTerminal, Frame,
 };
 
@@ -68,8 +66,8 @@ impl App {
                 Constraint::Fill(1),
                 Constraint::Length(3),
             ]).split(frame.area());
-        frame.render_widget(Paragraph::new("").block(Block::new().borders(Borders::ALL)), layout[0]);
         frame.render_widget(self, layout[1]);
+        self.render_graph(frame, layout[0]);
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
@@ -101,7 +99,7 @@ impl App {
 
     fn change_left(&mut self) {
         self.option_select = 
-            if (self.option_select <= 0) {
+            if self.option_select <= 0 {
                 0
             }
             else {
@@ -111,7 +109,7 @@ impl App {
 
     fn change_right(&mut self) {
         self.option_select =
-            if (self.option_select < 3) {
+            if self.option_select < 3 {
                 self.option_select + 1
             }
             else {
@@ -177,10 +175,38 @@ impl App {
     fn dec_incr_mult(&mut self) {
         self.incr_mult /= 10f64;
     }
-}
 
-struct App_Graph {
+    fn render_graph(&self, frame:&mut Frame, area: Rect) {
+        let (_bp_gs, bp_lcs) = chebyshev_bandpass_elements(
+            self.filt_stages,
+            self.filt_ripple,
+            self.filt_start_freq,
+            self.filt_end_freq,
+            );
+        let attns: Vec<(f64,f64)> = (0..self.graph_points)
+            .map(|x| {
+                let x = self.graph_start_freq + (self.graph_end_freq - self.graph_start_freq) * (x as f64) / (self.graph_points as f64);
+                (x,-attenuation_db(&bp_lcs,x,50f64))
+            }
+            ).collect();
+        let ds = Dataset::default()
+            .name("ideal filter")
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Color::Blue)
+            .data(&attns);
+        let x_axis = Axis::default()
+            .title("Frequency")
+            .bounds([self.graph_start_freq,self.graph_end_freq])
+            .labels([format!("{:.02}",self.graph_start_freq),format!("{:.02}",self.graph_end_freq)]);
+        let y_axis = Axis::default()
+            .title("Attenuation")
+            .bounds([-10f64,0f64])
+            .labels(["-10f64","0f64"]);
 
+        let chart = Chart::new(vec![ds]).x_axis(x_axis).y_axis(y_axis);
+        frame.render_widget(chart, area);
+    }
 }
 
 impl Widget for &App {
