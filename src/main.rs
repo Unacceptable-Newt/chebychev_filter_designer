@@ -17,21 +17,39 @@ use ratatui::{
     symbols::border,
     layout::{Constraint, Layout, Direction},
     text::{Line, Text, Span},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Paragraph, Widget, Borders},
     DefaultTerminal, Frame,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct App{
-    filt_start_freq: f32,
-    filt_end_freq: f32,
+    filt_start_freq: f64,
+    filt_end_freq: f64,
     filt_stages: usize,
-    filt_ripple: f32,
+    filt_ripple: f64,
     graph_points: usize,
-    graph_start_freq: f32,
-    graph_end_freq: f32,
+    graph_start_freq: f64,
+    graph_end_freq: f64,
     option_select: usize,
+    incr_mult: f64,
     exit: bool,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self{
+            filt_start_freq: 10000f64,
+            filt_end_freq: 1000000f64,
+            filt_stages: 4,
+            filt_ripple: 0.5f64,
+            graph_points: 1000,
+            graph_start_freq: 5000f64,
+            graph_end_freq: 5000000f64,
+            option_select: 0,
+            incr_mult: 0.01f64,
+            exit: false,
+        }
+    }
 }
 
 impl App {
@@ -50,7 +68,7 @@ impl App {
                 Constraint::Fill(1),
                 Constraint::Length(3),
             ]).split(frame.area());
-        frame.render_widget(self, layout[0]);
+        frame.render_widget(Paragraph::new("").block(Block::new().borders(Borders::ALL)), layout[0]);
         frame.render_widget(self, layout[1]);
     }
 
@@ -71,6 +89,8 @@ impl App {
             KeyCode::Right => self.change_right(),
             KeyCode::Up => self.change_up(),
             KeyCode::Down => self.change_down(),
+            KeyCode::Char('m') => self.incr_incr_mult(),
+            KeyCode::Char('n') => self.dec_incr_mult(),
             _ => {}
         }
     }
@@ -120,18 +140,18 @@ impl App {
     }
 
     fn inc_start_freq(&mut self) {
-        self.filt_start_freq += 0.01;
+        self.filt_start_freq += self.incr_mult;
     }
 
     fn dec_start_freq(&mut self) {
-        self.filt_start_freq -= 0.01;
+        self.filt_start_freq -= self.incr_mult;
     }
     fn inc_end_freq(&mut self) {
-        self.filt_end_freq += 0.01;
+        self.filt_end_freq += self.incr_mult;
     }
 
     fn dec_end_freq(&mut self) {
-        self.filt_end_freq -= 0.01;
+        self.filt_end_freq -= self.incr_mult;
     }
 
     fn inc_stages(&mut self) {
@@ -148,6 +168,14 @@ impl App {
 
     fn dec_ripple(&mut self) {
         self.filt_ripple -= 0.01;
+    }
+
+    fn incr_incr_mult(&mut self) {
+        self.incr_mult *= 10f64;
+    }
+
+    fn dec_incr_mult(&mut self) {
+        self.incr_mult /= 10f64;
     }
 }
 
@@ -166,6 +194,10 @@ impl Widget for &App {
             "<Up>".blue().bold(),
             " Dec Selected ".into(),
             "<Down>".blue().bold(),
+            " Increce Mag ".into(),
+            "<n>".blue().bold(),
+            " Decreace Mag ".into(),
+            "<m>".into(),
             " Quit ".into(),
             "<Q> ".blue().bold(),
         ]);
@@ -175,13 +207,15 @@ impl Widget for &App {
 
         let mut options: Vec<Span>= vec![
             "FS_freq: ".into(),
-            self.filt_start_freq.to_string().yellow(),
+            format!("{:.2}",self.filt_start_freq).yellow(),
             " FE_freq: ".into(),
-            self.filt_end_freq.to_string().yellow(),
+            format!("{:.2}",self.filt_end_freq).yellow(),
             " n_filt: ".into(),
             self.filt_stages.to_string().yellow(),
             " ripple_filt: ".into(),
-            self.filt_ripple.to_string().yellow(),
+            format!("{:.2}",self.filt_ripple).yellow(),
+            " increace order: ".into(),
+            format!("{:.2}",self.incr_mult).yellow(),
         ];
 
         for (i, o) in options.iter_mut().enumerate() {
