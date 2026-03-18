@@ -30,10 +30,10 @@ Down 50
 Sleep 1s
 
 Right 1
-Up@2s 4
+Up@500ms 4
 
 Right 1
-Down@2s 45
+Down@100ms 45
 
 # Admire the output for a bit.
 Sleep 2s
