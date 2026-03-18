@@ -15,7 +15,7 @@ use ratatui::{
     symbols::{border, Marker},
     layout::{Constraint, Layout, Direction},
     text::{Line, Text, Span},
-    widgets::{Block, Paragraph, Widget, Dataset, GraphType, Axis, Chart},
+    widgets::{Block, Paragraph, Widget, Dataset, GraphType, Axis, Chart, Borders},
     DefaultTerminal, Frame,
 };
 
@@ -66,8 +66,16 @@ impl App {
                 Constraint::Fill(1),
                 Constraint::Length(3),
             ]).split(frame.area());
+
+        let top_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![
+                Constraint::Fill(1),
+                Constraint::Length(20),
+            ]).split(layout[0]);
         frame.render_widget(self, layout[1]);
-        self.render_graph(frame, layout[0]);
+        self.render_lcs(frame, top_layout[1]);
+        self.render_graph(frame, top_layout[0]);
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
@@ -206,6 +214,14 @@ impl App {
 
         let chart = Chart::new(vec![ds]).x_axis(x_axis).y_axis(y_axis);
         frame.render_widget(chart, area);
+    }
+
+    fn render_lcs(&self, frame:&mut Frame, area: Rect) {
+        frame.render_widget(
+            Paragraph::new("LCS go here")
+            .block(Block::new().borders(Borders::ALL)),
+            area
+        );
     }
 }
 
