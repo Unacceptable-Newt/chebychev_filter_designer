@@ -36,15 +36,15 @@ pub struct App{
 impl Default for App {
     fn default() -> Self {
         Self{
-            filt_start_freq: 10000f64,
-            filt_end_freq: 1000000f64,
-            filt_stages: 4,
+            filt_start_freq: 1500000f64,
+            filt_end_freq:   3500000f64,
+            filt_stages: 5,
             filt_ripple: 0.5f64,
             graph_points: 1000,
             graph_start_freq: 5000f64,
             graph_end_freq: 5000000f64,
             option_select: 0,
-            incr_mult: 0.01f64,
+            incr_mult: 10000.00f64,
             exit: false,
         }
     }
